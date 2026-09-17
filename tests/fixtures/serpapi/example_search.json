@@ -1,0 +1,19 @@
+{
+  "search_metadata": {"status": "Success"},
+  "organic_results": [
+    {
+      "title": "Example claim first reported",
+      "link": "https://example-news.com/story-a",
+      "snippet": "Officials say the example claim occurred on January 10th.",
+      "displayed_link": "example-news.com",
+      "date": "Jan 10, 2019"
+    },
+    {
+      "title": "Another outlet covers the same claim",
+      "link": "https://another-outlet.com/story-b",
+      "snippet": "The claim reported by example-news.com was confirmed today.",
+      "displayed_link": "another-outlet.com",
+      "date": "Jan 11, 2019"
+    }
+  ]
+}
