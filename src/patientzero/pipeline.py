@@ -1,7 +1,8 @@
 """Top-level orchestration: raw text in, a ClaimReport per atomized claim out.
-This is the single entry point the FastAPI wrapper (separate plan) calls.
+This is the single entry point the FastAPI wrapper calls.
 """
 from datetime import date
+from typing import Callable
 
 from patientzero.atomizer import atomize
 from patientzero.bisection import find_origin
@@ -14,6 +15,8 @@ from patientzero.serp_client import SerpApiError, SerpClient
 from patientzero.stance import classify_stances
 
 DEFAULT_LOCALES = ["en", "hi"]
+
+ProgressCallback = Callable[[str, dict], None]
 
 
 def _relevance_check(claim: Claim, results: list[SearchResult]) -> bool:
@@ -43,22 +46,34 @@ def run_pipeline(
     llm: LLMClient,
     today: date,
     locales: list[str] = None,
+    on_progress: ProgressCallback | None = None,
 ) -> list[ClaimReport]:
     if locales is None:
         locales = DEFAULT_LOCALES
+    if on_progress is None:
+        on_progress = lambda stage, detail: None  # noqa: E731
 
+    on_progress("atomizing", {})
     try:
         claims = atomize(text, llm)
     except LLMClientError:
         # Per spec sec 6: an atomizer failure degrades to an empty list of
         # reports, the same as the "no claims extracted" case.
+        on_progress("atomize_failed", {})
         return []
+
+    on_progress("claims_extracted", {"count": len(claims)})
 
     reports = []
 
     for claim in claims:
+        on_progress("claim_started", {"claim_index": claim.index, "text": claim.text})
         try:
             origin = find_origin(claim, serp_client, today, relevance_check=_relevance_check)
+            on_progress(
+                "origin_search_complete",
+                {"claim_index": claim.index, "confidence": origin.confidence},
+            )
 
             locale_asymmetry = {}
             all_results_for_independence = []
@@ -68,6 +83,10 @@ def run_pipeline(
                 all_results_for_independence.extend(results)
                 stances = classify_stances(claim, results, llm)
                 locale_asymmetry[locale] = stances
+                on_progress(
+                    "locale_search_complete",
+                    {"claim_index": claim.index, "locale": locale, "result_count": len(results)},
+                )
 
             clusters = cluster_results(all_results_for_independence)
             independence = score_independence(all_results_for_independence, clusters)
@@ -83,10 +102,13 @@ def run_pipeline(
                     locale_asymmetry=locale_asymmetry,
                 )
             )
-        except (SerpApiError, LLMClientError):
+            on_progress("claim_complete", {"claim_index": claim.index})
+        except (SerpApiError, LLMClientError) as exc:
             # Per spec sec 6: all stages degrade to partial results rather
             # than raising. One claim's failure must not abort the whole
             # batch of claims already produced by this run.
+            on_progress("claim_failed", {"claim_index": claim.index, "error": str(exc)})
             continue
 
+    on_progress("pipeline_complete", {"report_count": len(reports)})
     return reports
