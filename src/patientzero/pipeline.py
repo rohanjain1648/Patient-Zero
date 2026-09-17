@@ -7,10 +7,10 @@ from patientzero.atomizer import atomize
 from patientzero.bisection import find_origin
 from patientzero.echo import cluster_results
 from patientzero.independence import score_independence
-from patientzero.llm_client import LLMClient
+from patientzero.llm_client import LLMClient, LLMClientError
 from patientzero.models import Claim, ClaimReport, SearchResult
 from patientzero.query_planner import build_locale_query
-from patientzero.serp_client import SerpClient
+from patientzero.serp_client import SerpApiError, SerpClient
 from patientzero.stance import classify_stances
 
 DEFAULT_LOCALES = ["en", "hi"]
@@ -51,30 +51,36 @@ def run_pipeline(
     reports = []
 
     for claim in claims:
-        origin = find_origin(claim, serp_client, today, relevance_check=_relevance_check)
+        try:
+            origin = find_origin(claim, serp_client, today, relevance_check=_relevance_check)
 
-        locale_asymmetry = {}
-        all_results_for_independence = []
-        for locale in locales:
-            params = build_locale_query(claim, hl=locale)
-            results = serp_client.search_results(params)
-            all_results_for_independence.extend(results)
-            stances = classify_stances(claim, results, llm)
-            locale_asymmetry[locale] = stances
+            locale_asymmetry = {}
+            all_results_for_independence = []
+            for locale in locales:
+                params = build_locale_query(claim, hl=locale)
+                results = serp_client.search_results(params)
+                all_results_for_independence.extend(results)
+                stances = classify_stances(claim, results, llm)
+                locale_asymmetry[locale] = stances
 
-        clusters = cluster_results(all_results_for_independence)
-        independence = score_independence(all_results_for_independence, clusters)
+            clusters = cluster_results(all_results_for_independence)
+            independence = score_independence(all_results_for_independence, clusters)
 
-        primary_stances = locale_asymmetry.get(locales[0], [])
+            primary_stances = locale_asymmetry.get(locales[0], [])
 
-        reports.append(
-            ClaimReport(
-                claim=claim,
-                origin=origin,
-                independence=independence,
-                stances=primary_stances,
-                locale_asymmetry=locale_asymmetry,
+            reports.append(
+                ClaimReport(
+                    claim=claim,
+                    origin=origin,
+                    independence=independence,
+                    stances=primary_stances,
+                    locale_asymmetry=locale_asymmetry,
+                )
             )
-        )
+        except (SerpApiError, LLMClientError):
+            # Per spec sec 6: all stages degrade to partial results rather
+            # than raising. One claim's failure must not abort the whole
+            # batch of claims already produced by this run.
+            continue
 
     return reports
