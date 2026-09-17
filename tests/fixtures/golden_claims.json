@@ -1,0 +1,7 @@
+[
+  {
+    "name": "no_clear_origin_case",
+    "input_text": "A claim that appears in no indexed source anywhere.",
+    "expected_origin_confidence": "unresolved"
+  }
+]
