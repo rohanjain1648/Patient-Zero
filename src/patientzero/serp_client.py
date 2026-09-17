@@ -51,7 +51,12 @@ class SerpClient:
                 "SERPAPI_MOCK=1 but no 'fixture' key given in params; "
                 "cannot select a fixture file"
             )
-        fixture_path = Path(self.mock_dir) / f"{fixture_name}.json"
+        # Sanitize against path traversal: only the bare file name (no
+        # directory separators, no "..") is allowed to select a fixture.
+        safe_name = Path(fixture_name).name
+        if safe_name != fixture_name or safe_name in ("", ".", ".."):
+            raise SerpApiError(f"invalid fixture name: {fixture_name!r}")
+        fixture_path = Path(self.mock_dir) / f"{safe_name}.json"
         if not fixture_path.exists():
             raise SerpApiError(f"fixture file not found: {fixture_path}")
         return json.loads(fixture_path.read_text())
@@ -67,9 +72,13 @@ class SerpClient:
                 resp = requests.get(SERPAPI_ENDPOINT, params=request_params, timeout=30)
                 resp.raise_for_status()
                 return resp.json()
-            except requests.RequestException as exc:
+            except (requests.RequestException, ValueError) as exc:
+                # ValueError covers json.JSONDecodeError: a 200 response with
+                # a malformed/non-JSON body should be retried just like a
+                # network error, not propagate uncaught.
                 last_error = exc
-                time.sleep(2 ** attempt)
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(2 ** attempt)
         raise SerpApiError(f"SerpApi call failed after {MAX_RETRIES} retries: {last_error}")
 
     def search_results(self, params: dict) -> list[SearchResult]:
