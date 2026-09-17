@@ -34,6 +34,7 @@ def test_search_results_parses_organic_results_into_dataclasses(monkeypatch):
     assert len(results) == 2
     assert results[0].domain == "example-news.com"
     assert results[0].title == "Example claim first reported"
+    assert results[0].date == "2019-01-10"
 
 
 def test_second_identical_call_hits_cache_not_fixture_lookup(monkeypatch, tmp_path):
@@ -46,3 +47,21 @@ def test_second_identical_call_hits_cache_not_fixture_lookup(monkeypatch, tmp_pa
     client.mock_dir = "/nonexistent/path"
     second = client.search(params)
     assert first == second
+
+
+def test_max_calls_cap_raises_after_limit_exceeded(monkeypatch):
+    monkeypatch.setenv("SERPAPI_MOCK", "1")
+    cache = Cache(db_path=":memory:")
+    client = SerpClient(api_key=None, cache=cache, mock_dir=str(FIXTURE_DIR), max_calls=1)
+    client.search({"q": "first call", "fixture": "example_search"})
+    with pytest.raises(SerpApiError, match="cap"):
+        client.search({"q": "second call, different params", "fixture": "example_search"})
+
+
+def test_max_calls_cap_does_not_count_cache_hits(monkeypatch):
+    monkeypatch.setenv("SERPAPI_MOCK", "1")
+    cache = Cache(db_path=":memory:")
+    client = SerpClient(api_key=None, cache=cache, mock_dir=str(FIXTURE_DIR), max_calls=1)
+    params = {"q": "same params", "fixture": "example_search"}
+    client.search(params)  # 1st real call, uses up the cap
+    client.search(params)  # identical params -> cache hit, should NOT raise

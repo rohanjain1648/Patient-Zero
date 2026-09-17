@@ -1,7 +1,7 @@
 {
   "search_metadata": {"status": "Success"},
   "organic_results": [
-    {"title": "Report on the claim", "link": "https://wire-a.com/x", "snippet": "detailed evidence about the pipeline test claim", "displayed_link": "wire-a.com", "date": "Jun 1, 2019"},
-    {"title": "Second outlet on the claim", "link": "https://wire-b.com/y", "snippet": "detailed evidence about the pipeline test claim", "displayed_link": "wire-b.com", "date": "Jun 2, 2019"}
+    {"title": "Report on the claim", "link": "https://wire-a.com/x", "snippet": "detailed evidence about the pipeline test claim", "displayed_link": "https://wire-a.com › x", "date": "Jun 1, 2019"},
+    {"title": "Second outlet on the claim", "link": "https://wire-b.com/y", "snippet": "detailed evidence about the pipeline test claim", "displayed_link": "https://wire-b.com › y", "date": "Jun 2, 2019"}
   ]
 }

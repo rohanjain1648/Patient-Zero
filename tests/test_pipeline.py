@@ -53,3 +53,13 @@ def test_run_pipeline_returns_empty_list_when_no_claims_extracted(monkeypatch):
 
     reports = run_pipeline("Just an opinion, no facts here.", serp_client, llm, today=date(2026, 9, 17))
     assert reports == []
+
+
+def test_run_pipeline_degrades_to_empty_list_when_atomizer_fails(monkeypatch):
+    monkeypatch.setenv("SERPAPI_MOCK", "1")
+    cache = Cache(db_path=":memory:")
+    serp_client = SerpClient(api_key=None, cache=cache, mock_dir=str(FIXTURE_DIR))
+    llm = FakeLLMClient(responses=[])  # exhausted immediately -> LLMClientError on first .complete() call (the atomizer's)
+
+    reports = run_pipeline("Some text", serp_client, llm, today=date(2026, 9, 17))
+    assert reports == []

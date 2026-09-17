@@ -7,7 +7,9 @@ the cache so subsequent identical calls don't even touch the filesystem.
 import json
 import os
 import time
+from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 
@@ -22,11 +24,33 @@ class SerpApiError(Exception):
     pass
 
 
+def _normalize_date(raw: str | None) -> str | None:
+    """Normalize a SerpApi date string (e.g. "Jan 10, 2019") to ISO 8601.
+
+    Returns None if `raw` is falsy or doesn't match the expected format,
+    rather than raising: date normalization must never abort a search.
+    """
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, "%b %d, %Y").date().isoformat()
+    except ValueError:
+        return None
+
+
 class SerpClient:
-    def __init__(self, api_key: str | None, cache: Cache, mock_dir: str | None = None):
+    def __init__(
+        self,
+        api_key: str | None,
+        cache: Cache,
+        mock_dir: str | None = None,
+        max_calls: int | None = None,
+    ):
         self.api_key = api_key
         self.cache = cache
         self.mock_dir = mock_dir
+        self.max_calls = max_calls
+        self._call_count = 0
 
     def _is_mock(self) -> bool:
         return os.environ.get("SERPAPI_MOCK") == "1"
@@ -35,6 +59,10 @@ class SerpClient:
         cached = self.cache.get(params)
         if cached is not None:
             return cached
+
+        if self.max_calls is not None and self._call_count >= self.max_calls:
+            raise SerpApiError("SerpApi call cap exceeded")
+        self._call_count += 1
 
         if self._is_mock():
             response = self._load_fixture(params)
@@ -85,13 +113,17 @@ class SerpClient:
         raw = self.search(params)
         results = []
         for item in raw.get("organic_results", []):
+            link = item.get("link", "")
+            netloc = urlparse(link).netloc
+            if netloc.startswith("www."):
+                netloc = netloc[len("www.") :]
             results.append(
                 SearchResult(
                     title=item.get("title", ""),
-                    link=item.get("link", ""),
+                    link=link,
                     snippet=item.get("snippet", ""),
-                    domain=item.get("displayed_link", "").split("/")[0],
-                    date=item.get("date"),
+                    domain=netloc,
+                    date=_normalize_date(item.get("date")),
                 )
             )
         return results

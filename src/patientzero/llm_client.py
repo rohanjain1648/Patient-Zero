@@ -40,11 +40,14 @@ class AnthropicLLMClient:
         self._model = model
 
     def complete(self, prompt: str) -> str:
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except Exception as exc:
+            raise LLMClientError(f"Anthropic API call failed: {exc}") from exc
         return "".join(
             block.text for block in response.content if hasattr(block, "text")
         )

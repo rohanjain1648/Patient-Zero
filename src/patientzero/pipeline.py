@@ -47,7 +47,13 @@ def run_pipeline(
     if locales is None:
         locales = DEFAULT_LOCALES
 
-    claims = atomize(text, llm)
+    try:
+        claims = atomize(text, llm)
+    except LLMClientError:
+        # Per spec sec 6: an atomizer failure degrades to an empty list of
+        # reports, the same as the "no claims extracted" case.
+        return []
+
     reports = []
 
     for claim in claims:

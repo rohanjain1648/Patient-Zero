@@ -12,7 +12,7 @@ SHINGLE_SIZE = 3
 
 
 def _normalize(text: str) -> str:
-    normalized = re.sub(r"[^a-z0-9 ]", "", text.lower())
+    normalized = re.sub(r"[^\w\s]", "", text.lower(), flags=re.UNICODE)
     return re.sub(r"\s+", " ", normalized).strip()
 
 

@@ -31,7 +31,10 @@ class Cache:
         ).fetchone()
         if row is None:
             return None
-        return json.loads(row[0])
+        try:
+            return json.loads(row[0])
+        except (json.JSONDecodeError, TypeError):
+            return None
 
     def put(self, params: dict, response: dict) -> None:
         key = self.cache_key(params)

@@ -32,3 +32,12 @@ def test_cache_persists_to_file(tmp_path):
 
     c2 = Cache(db_path=db_path)
     assert c2.get({"q": "persisted"}) == {"result": True}
+
+
+def test_corrupted_cached_body_is_treated_as_a_miss_not_a_crash(tmp_path):
+    db_path = str(tmp_path / "cache.sqlite3")
+    c = Cache(db_path=db_path)
+    key = c.cache_key({"q": "corrupt me"})
+    c._conn.execute("INSERT INTO responses (key, body) VALUES (?, ?)", (key, "not valid json {{{"))
+    c._conn.commit()
+    assert c.get({"q": "corrupt me"}) is None

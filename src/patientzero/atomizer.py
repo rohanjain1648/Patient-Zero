@@ -10,7 +10,7 @@ from patientzero.models import Claim
 
 def _build_prompt(text: str) -> str:
     return (
-        "Extract every individually fact-checkable factual assertion from the "
+        "Extract every individually checkable factual assertion from the "
         "text below. Ignore opinions, greetings, and non-factual statements. "
         "Respond ONLY with a JSON array of strings, one per claim. If there are "
         "no checkable factual claims, respond with an empty array: []\n\n"

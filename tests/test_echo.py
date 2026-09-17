@@ -44,3 +44,17 @@ def test_cluster_with_multiple_domains_reports_domain_count():
     clusters = cluster_results(results)
     assert len(clusters) == 1
     assert clusters[0].domain_count == 3
+
+
+def test_simhash_nonlatin_text_does_not_collapse_to_zero():
+    a = simhash("यह एक असंबंधित समाचार कहानी है जो बहुत अलग विषय पर है")
+    assert a != 0
+
+
+def test_cluster_results_does_not_falsely_merge_unrelated_nonlatin_text():
+    results = [
+        _result("पहली खबर", "यह एक पूरी तरह से अलग विषय के बारे में खबर है", "site-a.com"),
+        _result("दूसरी खबर", "बाजार में शेयरों की कीमतों में आज भारी गिरावट दर्ज की गई", "site-b.com"),
+    ]
+    clusters = cluster_results(results)
+    assert len(clusters) == 2
