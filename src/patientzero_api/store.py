@@ -16,7 +16,7 @@ from patientzero_api.serialization import claim_report_from_dict, serialize_clai
 class ReportStore:
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self._conn = sqlite3.connect(db_path)
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS reports ("
             "report_id TEXT PRIMARY KEY, claims_json TEXT NOT NULL, created_at TEXT NOT NULL"
