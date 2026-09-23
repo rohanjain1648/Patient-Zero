@@ -1,1 +1,11 @@
 .worktrees/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.env
+data/
+node_modules/
+.next/
+frontend/.env.local
+*.egg-info/
