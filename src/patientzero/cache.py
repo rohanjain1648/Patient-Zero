@@ -8,16 +8,21 @@ fully offline against recorded fixtures.
 import hashlib
 import json
 import sqlite3
+import threading
 
 
 class Cache:
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS responses (key TEXT PRIMARY KEY, body TEXT NOT NULL)"
-        )
-        self._conn.commit()
+        # The API runs each analysis on its own thread over one shared
+        # connection; sqlite3 connections are not safe for concurrent use.
+        self._lock = threading.Lock()
+        with self._lock:
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS responses (key TEXT PRIMARY KEY, body TEXT NOT NULL)"
+            )
+            self._conn.commit()
 
     @staticmethod
     def cache_key(params: dict) -> str:
@@ -26,9 +31,10 @@ class Cache:
 
     def get(self, params: dict) -> dict | None:
         key = self.cache_key(params)
-        row = self._conn.execute(
-            "SELECT body FROM responses WHERE key = ?", (key,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT body FROM responses WHERE key = ?", (key,)
+            ).fetchone()
         if row is None:
             return None
         try:
@@ -39,10 +45,12 @@ class Cache:
     def put(self, params: dict, response: dict) -> None:
         key = self.cache_key(params)
         body = json.dumps(response)
-        self._conn.execute(
-            "INSERT OR REPLACE INTO responses (key, body) VALUES (?, ?)", (key, body)
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO responses (key, body) VALUES (?, ?)", (key, body)
+            )
+            self._conn.commit()
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()

@@ -5,6 +5,7 @@ recorded fixture files, keyed by the "fixture" param, and then written into
 the cache so subsequent identical calls don't even touch the filesystem.
 """
 import json
+import copy
 import os
 import time
 from datetime import datetime
@@ -51,6 +52,13 @@ class SerpClient:
         self.mock_dir = mock_dir
         self.max_calls = max_calls
         self._call_count = 0
+
+    def new_run(self) -> "SerpClient":
+        """Shallow copy with a fresh call counter, sharing the cache. The cap
+        is per analysis run, so a long-lived client must hand each run its own."""
+        clone = copy.copy(self)
+        clone._call_count = 0
+        return clone
 
     def _is_mock(self) -> bool:
         return os.environ.get("SERPAPI_MOCK") == "1"

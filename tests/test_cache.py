@@ -41,3 +41,23 @@ def test_corrupted_cached_body_is_treated_as_a_miss_not_a_crash(tmp_path):
     c._conn.execute("INSERT INTO responses (key, body) VALUES (?, ?)", (key, "not valid json {{{"))
     c._conn.commit()
     assert c.get({"q": "corrupt me"}) is None
+
+
+def test_concurrent_threads_share_one_cache(tmp_path):
+    import threading
+
+    cache = Cache(str(tmp_path / "c.db"))
+    errors = []
+
+    def work(n):
+        try:
+            for i in range(50):
+                cache.put({"q": f"{n}-{i}"}, {"v": i})
+                assert cache.get({"q": f"{n}-{i}"}) == {"v": i}
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=work, args=(n,)) for n in range(8)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert errors == []

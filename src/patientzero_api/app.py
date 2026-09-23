@@ -8,6 +8,7 @@ import uuid
 from datetime import date
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from patientzero.llm_client import LLMClient
@@ -20,8 +21,15 @@ from patientzero_api.store import ReportStore
 _DONE = object()
 
 
-def create_app(serp_client: SerpClient, llm_client: LLMClient, store: ReportStore) -> FastAPI:
+def create_app(
+    serp_client: SerpClient,
+    llm_client: LLMClient,
+    store: ReportStore,
+    cors_origins: list[str] | None = None,
+) -> FastAPI:
     app = FastAPI(title="Patient Zero API")
+    if cors_origins:
+        app.add_middleware(CORSMiddleware, allow_origins=cors_origins, allow_methods=["GET"])
 
     @app.get("/api/analyze")
     def analyze(text: str = Query(..., min_length=1)):
@@ -33,8 +41,9 @@ def create_app(serp_client: SerpClient, llm_client: LLMClient, store: ReportStor
 
         def worker() -> None:
             try:
+                run_client = serp_client.new_run() if hasattr(serp_client, "new_run") else serp_client
                 reports = run_pipeline(
-                    text, serp_client, llm_client, today=date.today(), on_progress=on_progress
+                    text, run_client, llm_client, today=date.today(), on_progress=on_progress
                 )
                 store.save(report_id, reports)
                 events.put(
