@@ -38,3 +38,48 @@ def test_claim_report_from_dict_round_trips_serialize_claim_report():
     original = _sample_report()
     round_tripped = claim_report_from_dict(serialize_claim_report(original))
     assert round_tripped == original
+
+
+def test_round_trip_preserves_propagation():
+    from patientzero.models import MediaMention, Propagation, TrendPoint
+
+    report = ClaimReport(
+        claim=Claim(text="c", index=0),
+        origin=OriginCandidate(date="2016-06-05", confidence="high", evidence_urls=["u"]),
+        independence=IndependenceScore(
+            distinct_clusters=1, distinct_domains=1, temporal_spread_days=0, score=0.5
+        ),
+        stances=[],
+        locale_asymmetry={},
+        propagation=Propagation(
+            trend=[TrendPoint(date="Jun 2016", timestamp=1464739200, value=91)],
+            mentions=[
+                MediaMention(
+                    medium="news", title="t", link="l", source="s", date="2016-07-04"
+                )
+            ],
+            peak_date="2016-06-01",
+        ),
+    )
+
+    restored = claim_report_from_dict(serialize_claim_report(report))
+    assert restored == report
+
+
+def test_a_report_stored_before_propagation_existed_still_loads():
+    """Rows written by the pre-propagation schema have no such key."""
+    legacy = {
+        "claim": {"text": "c", "index": 0},
+        "origin": {"date": None, "confidence": "unresolved", "evidence_urls": []},
+        "independence": {
+            "distinct_clusters": 0,
+            "distinct_domains": 0,
+            "temporal_spread_days": 0,
+            "score": 0.0,
+        },
+        "stances": [],
+        "locale_asymmetry": {},
+    }
+    restored = claim_report_from_dict(legacy)
+    assert restored.propagation.trend == []
+    assert restored.propagation.peak_date is None

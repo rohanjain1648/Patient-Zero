@@ -10,6 +10,7 @@ from patientzero.echo import cluster_results
 from patientzero.independence import score_independence
 from patientzero.llm_client import LLMClient, LLMClientError
 from patientzero.models import Claim, ClaimReport, SearchResult
+from patientzero.propagation import trace_propagation
 from patientzero.query_planner import build_locale_query
 from patientzero.serp_client import SerpApiError, SerpClient
 from patientzero.stance import classify_stances
@@ -88,6 +89,14 @@ def run_pipeline(
                     {"claim_index": claim.index, "locale": locale, "result_count": len(results)},
                 )
 
+            propagation = trace_propagation(
+                claim,
+                serp_client,
+                on_progress=lambda stage, detail: on_progress(
+                    stage, {"claim_index": claim.index, **detail}
+                ),
+            )
+
             clusters = cluster_results(all_results_for_independence)
             independence = score_independence(all_results_for_independence, clusters)
 
@@ -100,9 +109,13 @@ def run_pipeline(
                     independence=independence,
                     stances=primary_stances,
                     locale_asymmetry=locale_asymmetry,
+                    propagation=propagation,
                 )
             )
-            on_progress("claim_complete", {"claim_index": claim.index})
+            on_progress(
+                "claim_complete",
+                {"claim_index": claim.index, **getattr(serp_client, "usage", {})},
+            )
         except (SerpApiError, LLMClientError) as exc:
             # Per spec sec 6: all stages degrade to partial results rather
             # than raising. One claim's failure must not abort the whole
@@ -110,5 +123,8 @@ def run_pipeline(
             on_progress("claim_failed", {"claim_index": claim.index, "error": str(exc)})
             continue
 
-    on_progress("pipeline_complete", {"report_count": len(reports)})
+    on_progress(
+        "pipeline_complete",
+        {"report_count": len(reports), **getattr(serp_client, "usage", {})},
+    )
     return reports

@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from patientzero.llm_client import LLMClient
 from patientzero.pipeline import run_pipeline
 from patientzero.serp_client import SerpClient
+from patientzero_api.demo import DemoSessionUnavailable, load_session, replay_events
 from patientzero_api.serialization import serialize_claim_report
 from patientzero_api.sse import format_sse_event
 from patientzero_api.store import ReportStore
@@ -22,17 +23,28 @@ _DONE = object()
 
 
 def create_app(
-    serp_client: SerpClient,
-    llm_client: LLMClient,
+    serp_client: SerpClient | None,
+    llm_client: LLMClient | None,
     store: ReportStore,
     cors_origins: list[str] | None = None,
+    demo_only: bool = False,
 ) -> FastAPI:
+    """`demo_only` starts the API with no API keys at all: /api/analyze then
+    replays a recorded session so the repo runs end to end for a judge who has
+    no credentials of their own.
+    """
     app = FastAPI(title="Patient Zero API")
     if cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=cors_origins, allow_methods=["GET"])
 
+    @app.get("/api/health")
+    def health():
+        return {"status": "ok", "mode": "demo" if demo_only else "live"}
+
     @app.get("/api/analyze")
-    def analyze(text: str = Query(..., min_length=1)):
+    def analyze(text: str = Query(..., min_length=1), demo: bool = False):
+        if demo or demo_only:
+            return _demo_response()
         report_id = str(uuid.uuid4())
         events: "queue.Queue" = queue.Queue()
 
@@ -72,6 +84,21 @@ def create_app(
                 if item is _DONE:
                     break
                 event, data = item
+                yield format_sse_event(event, data)
+
+        return StreamingResponse(stream(), media_type="text/event-stream")
+
+    def _demo_response() -> StreamingResponse:
+        try:
+            session = load_session()
+        except DemoSessionUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        def stream():
+            yield format_sse_event(
+                "demo", {"claim": session.get("claim", ""), "recorded_at": session.get("recorded_at")}
+            )
+            for event, data in replay_events(session):
                 yield format_sse_event(event, data)
 
         return StreamingResponse(stream(), media_type="text/event-stream")

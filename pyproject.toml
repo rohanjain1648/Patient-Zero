@@ -18,3 +18,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# The recorded demo session must ship with the package so an installed copy
+# can still run zero-key demo mode.
+patientzero_api = ["demo_session.json"]

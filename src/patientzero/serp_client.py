@@ -52,13 +52,23 @@ class SerpClient:
         self.mock_dir = mock_dir
         self.max_calls = max_calls
         self._call_count = 0
+        # Demo/judging transparency: the UI shows live calls vs cache hits so
+        # the credit discipline in spec sec 5 is visible, not just claimed.
+        self.cache_hits = 0
 
     def new_run(self) -> "SerpClient":
         """Shallow copy with a fresh call counter, sharing the cache. The cap
         is per analysis run, so a long-lived client must hand each run its own."""
         clone = copy.copy(self)
         clone._call_count = 0
+        clone.cache_hits = 0
         return clone
+
+    @property
+    def usage(self) -> dict:
+        """Live SerpApi calls actually billed this run, vs calls the cache
+        served for free."""
+        return {"live_calls": self._call_count, "cache_hits": self.cache_hits}
 
     def _is_mock(self) -> bool:
         return os.environ.get("SERPAPI_MOCK") == "1"
@@ -66,6 +76,7 @@ class SerpClient:
     def search(self, params: dict) -> dict:
         cached = self.cache.get(params)
         if cached is not None:
+            self.cache_hits += 1
             return cached
 
         if self.max_calls is not None and self._call_count >= self.max_calls:

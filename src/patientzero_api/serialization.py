@@ -5,7 +5,16 @@ other module builds its own shape for a ClaimReport.
 """
 from dataclasses import asdict
 
-from patientzero.models import Claim, ClaimReport, IndependenceScore, OriginCandidate, StanceResult
+from patientzero.models import (
+    Claim,
+    ClaimReport,
+    IndependenceScore,
+    MediaMention,
+    OriginCandidate,
+    Propagation,
+    StanceResult,
+    TrendPoint,
+)
 
 
 def serialize_claim_report(report: ClaimReport) -> dict:
@@ -22,4 +31,17 @@ def claim_report_from_dict(data: dict) -> ClaimReport:
             locale: [StanceResult(**s) for s in stances]
             for locale, stances in data["locale_asymmetry"].items()
         },
+        propagation=_propagation_from_dict(data.get("propagation")),
+    )
+
+
+def _propagation_from_dict(data: dict | None) -> Propagation:
+    # Reports stored before propagation existed have no such key; they must
+    # still load rather than 500 the saved-report endpoint.
+    if not data:
+        return Propagation()
+    return Propagation(
+        trend=[TrendPoint(**p) for p in data.get("trend", [])],
+        mentions=[MediaMention(**m) for m in data.get("mentions", [])],
+        peak_date=data.get("peak_date"),
     )
