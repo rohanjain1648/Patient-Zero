@@ -9,3 +9,5 @@ node_modules/
 .next/
 frontend/.env.local
 *.egg-info/
+.playwright-mcp/
+*.tsbuildinfo
