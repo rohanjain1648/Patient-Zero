@@ -7,6 +7,7 @@ automatic fallback when Groq fails: FallbackLLMClient wraps both behind the
 same LLMClient protocol so every caller (atomizer, stance classifier,
 pipeline) stays completely unaware of which provider actually answered.
 """
+import os
 from typing import Protocol
 
 
@@ -32,22 +33,47 @@ class FakeLLMClient:
         return self._responses.pop(0)
 
 
+# Sampling temperature for every real provider. Non-zero temperature made the
+# atomizer reword the same input differently on each run ("...visible from
+# space." vs "...visible from space with the naked eye."), which changed the
+# claim text, which changed the SerpApi query, which changed the cache key —
+# so an identical input was billed as a fresh set of searches every time.
+# Deterministic decoding is what makes the content-addressed cache in spec
+# sec 5 actually pay off, and it keeps stance labels stable between runs.
+DEFAULT_TEMPERATURE = 0.0
+
+# Hosted model names get decommissioned without notice — llama-3.3-70b-versatile
+# stopped resolving mid-project and every LLM call began failing with a 404,
+# which the pipeline correctly degraded into "no claims extracted". Both
+# defaults are overridable by environment variable so the next retirement is a
+# config change rather than a code change.
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+
+
 class GroqLLMClient:
     """Primary real implementation, backed by Groq. Requires the `groq`
     package (install with `pip install patientzero-core[llm]`).
     """
 
-    def __init__(self, api_key: str, model: str = "llama-3.3-70b-versatile"):
+    def __init__(
+        self,
+        api_key: str,
+        model: str | None = None,
+        temperature: float = DEFAULT_TEMPERATURE,
+    ):
         import groq  # deferred import: only required when actually used
 
         self._client = groq.Groq(api_key=api_key)
-        self._model = model
+        self._model = model or os.environ.get("GROQ_MODEL") or DEFAULT_GROQ_MODEL
+        self._temperature = temperature
 
     def complete(self, prompt: str) -> str:
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
                 max_tokens=1024,
+                temperature=self._temperature,
                 messages=[{"role": "user", "content": prompt}],
             )
         except Exception as exc:
@@ -60,17 +86,24 @@ class OpenAILLMClient:
     package (install with `pip install patientzero-core[llm]`).
     """
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(
+        self,
+        api_key: str,
+        model: str | None = None,
+        temperature: float = DEFAULT_TEMPERATURE,
+    ):
         import openai  # deferred import: only required when actually used
 
         self._client = openai.OpenAI(api_key=api_key)
-        self._model = model
+        self._model = model or os.environ.get("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
+        self._temperature = temperature
 
     def complete(self, prompt: str) -> str:
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
                 max_tokens=1024,
+                temperature=self._temperature,
                 messages=[{"role": "user", "content": prompt}],
             )
         except Exception as exc:
