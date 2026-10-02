@@ -2,6 +2,8 @@
 name = "patientzero-core"
 version = "0.1.0"
 description = "Claim provenance and propagation forensics engine, powered by SerpApi"
+license = "MIT"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31",

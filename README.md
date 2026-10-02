@@ -125,18 +125,54 @@ flowchart TD
 
 ---
 
-## ▶️ Running the API + Web UI
+## ▶️ Quick start
+
+### Run it with no API keys at all
+
+The repo ships a session recorded from a real analysis, so it runs end to end
+without a SerpApi, Groq or OpenAI key — and without spending anyone's credits:
 
 ```bash
 python -m venv .venv && .venv/Scripts/activate    # Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev,llm,api]"
-cp .env.example .env                                # then fill in SERPAPI_API_KEY, GROQ_API_KEY, OPENAI_API_KEY
-uvicorn patientzero_api.main:app --port 8000
+uvicorn patientzero_api.main:app --port 8000      # starts in DEMO MODE when keys are absent
 
-cd frontend && cp .env.example .env.local && npm install && npm run dev   # http://localhost:3000
+cd frontend && npm install && npm run dev         # http://localhost:3000
 ```
 
-`SERPAPI_MOCK=1` with `SERPAPI_MOCK_DIR` reads SerpApi responses from fixtures instead of the network (the LLM keys are still required).
+The UI labels the stream as a replay, and `GET /api/health` reports
+`{"mode": "demo"}`. Nothing recorded is ever presented as a live result.
+
+### Run a live analysis
+
+```bash
+cp .env.example .env     # fill in SERPAPI_API_KEY, GROQ_API_KEY, OPENAI_API_KEY
+uvicorn patientzero_api.main:app --port 8000
+```
+
+A full analysis costs roughly 12–15 SerpApi calls, capped per run and
+content-address cached, so a repeated claim costs nothing. The UI shows live
+calls vs cache hits while the analysis streams.
+
+To re-record the demo session from a live run:
+
+```bash
+python scripts/record_demo.py "Some claim to analyse"
+```
+
+---
+
+## 🔍 SerpApi engines used
+
+| Engine | Role in the pipeline |
+|---|---|
+| `google` | Date-restricted probes for temporal bisection, plus per-locale corroboration queries (`hl=en`, `hl=hi`) |
+| `google_news` | Dated, source-attributed propagation trail — where the claim travelled after it first appeared |
+| `google_trends` | Public search interest over time (`TIMESERIES`, full history), overlaid with the bisected origin date |
+
+The gap between the two markers on the Trends curve is the analytical payload:
+a claim indexed years before anyone searched for it spread slowly, while a peak
+sitting on top of the origin date arrived fully formed.
 
 ---
 
@@ -144,8 +180,14 @@ cd frontend && cp .env.example .env.local && npm install && npm run dev   # http
 
 The application relies on API keys injected into the core clients. Set these in your environment or pass them directly during client instantiation:
 
-*   **SerpApi**: Requires a valid API key for `SerpClient`.
-*   **LLMs**: Requires `GROQ_API_KEY` and `OPENAI_API_KEY` for the `FallbackLLMClient` to operate correctly.
+| Variable | Purpose |
+|---|---|
+| `SERPAPI_API_KEY` | SerpApi access for `SerpClient`. Absent → the API starts in demo mode. |
+| `GROQ_API_KEY` | Primary LLM provider. Absent → demo mode. |
+| `OPENAI_API_KEY` | Fallback LLM provider. Absent → demo mode. |
+| `SERPAPI_MOCK` | `1` reads SerpApi responses from fixtures in `SERPAPI_MOCK_DIR` instead of the network. |
+| `PATIENTZERO_DATA_DIR` | Where the response cache and saved reports live (default `data/`). |
+| `CORS_ORIGINS` | Comma-separated origins allowed to call the API (default `http://localhost:3000`). |
 
 ---
 
