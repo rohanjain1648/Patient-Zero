@@ -84,7 +84,7 @@ def test_replay_preserves_recorded_order_and_compresses_the_gaps():
     assert [e for e, _ in out] == ["progress", "progress"]
     assert [d["stage"] for _, d in out] == ["a", "b"]
     # A 60s recorded gap must not become a 60s demo gap.
-    assert slept and max(slept) <= 0.6
+    assert slept and max(slept) <= 1.2
 
 
 def test_demo_only_app_streams_a_replay_without_any_clients(tmp_path):

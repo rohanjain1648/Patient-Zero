@@ -20,8 +20,8 @@ DEFAULT_SESSION_PATH = Path(__file__).parent / "demo_session.json"
 # verbatim would make the demo video mostly dead air, so gaps are scaled down
 # and clamped — fast enough to hold attention, slow enough that a viewer can
 # read each stage as it lands.
-REPLAY_SPEED = 6.0
-MAX_GAP_SECONDS = 0.6
+REPLAY_SPEED = 4.0
+MAX_GAP_SECONDS = 1.2
 MIN_GAP_SECONDS = 0.08
 
 
