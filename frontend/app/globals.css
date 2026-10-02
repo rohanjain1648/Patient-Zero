@@ -14,6 +14,7 @@
   --lime-muted:  rgba(196,240,66,0.18);
   --lavender:    #c5c7f8;
   --lavender-bg: #ebebfd;
+  --lavender-deep: #6f72d6;   /* chart strokes: --lavender is too pale on --canvas */
   --sage:        #e2f4b4;
   --ink:         #111111;
   --ink-mid:     #3a3a3a;
@@ -554,6 +555,9 @@ body {
   max-width: 900px;
   margin: 0 auto;
   padding: 0 24px 80px;
+  /* The nav is sticky at top:0; without this, scrollIntoView on results puts
+     the progress-panel header (and its SerpApi usage meter) under the nav. */
+  scroll-margin-top: 84px;
 }
 
 /* ──────────────────────────────────────────────
@@ -1080,4 +1084,167 @@ body {
   .stats-grid { grid-template-columns: 1fr; }
   .stat-item { border-right: none; }
   .how-steps { grid-template-columns: 1fr; }
+}
+
+/* ───────────────────────── Propagation panel ───────────────────────── */
+
+.engine-chip {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--mute);
+  border: 1px solid var(--border);
+  background: var(--white);
+}
+
+.trend-chart { margin: 4px 0 2px; }
+
+.trend-chart svg {
+  width: 100%;
+  height: 130px;
+  display: block;
+  overflow: visible;
+}
+
+.trend-axis,
+.trend-legend {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--mute);
+}
+
+.trend-axis { justify-content: space-between; align-items: baseline; margin-top: 6px; }
+
+.trend-axis-note {
+  color: var(--mute-light);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.trend-legend { gap: 18px; flex-wrap: wrap; margin-top: 10px; }
+
+.trend-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
+.trend-legend-item i {
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.trend-absent {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.lag-callout {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-mid);
+  border: 1px solid var(--border);
+  background: var(--lavender-bg);
+}
+
+.lag-callout strong { color: var(--ink); }
+
+.mentions-list { margin-top: 18px; }
+
+.mentions-heading {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute-light);
+  margin-bottom: 8px;
+}
+
+.mention-row {
+  display: flex;
+  gap: 14px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+  text-decoration: none;
+  color: inherit;
+  align-items: baseline;
+}
+
+.mention-row:hover .mention-title { color: var(--lavender-deep); }
+
+.mention-date {
+  flex: 0 0 74px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--mute-light);
+  white-space: nowrap;
+}
+
+.mention-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.mention-title {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  transition: color 0.15s;
+}
+
+.mention-source { font-size: 11px; color: var(--mute); }
+
+/* ──────────────────── SerpApi usage meter + replay ──────────────────── */
+
+.usage-meter { margin-left: auto; display: inline-flex; gap: 6px; }
+
+.usage-chip {
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--dark-border);
+  white-space: nowrap;
+}
+
+.usage-chip.live { color: var(--lime); }
+.usage-chip.cached { color: var(--mute-light); }
+
+.replay-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-mid);
+  border: 1px solid var(--warn);
+  background: rgba(229, 184, 92, 0.14);
+  box-shadow: var(--shadow-sm);
+}
+
+.replay-banner strong { color: var(--ink); }
+
+.replay-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+@media (max-width: 640px) {
+  .usage-meter { margin-left: 0; width: 100%; padding-top: 6px; }
+  .mention-row { flex-direction: column; gap: 4px; }
+  .mention-date { flex: none; }
 }

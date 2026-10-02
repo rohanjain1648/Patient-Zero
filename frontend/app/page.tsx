@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { API_URL, ClaimReport, ProgressEvent } from "@/lib/types";
+import { API_URL, ClaimReport, ProgressEvent, Usage } from "@/lib/types";
+import PropagationPanel from "@/components/Propagation";
 
 function describe(e: ProgressEvent): string {
   const { stage, ...rest } = e;
@@ -115,6 +116,8 @@ function ReportCard({ r, index }: { r: ClaimReport; index: number }) {
           <StancesPanel items={r.stances} />
         </div>
 
+        <PropagationPanel propagation={r.propagation} originDate={r.origin.date} />
+
         {/* Locale Asymmetry */}
         {Object.entries(r.locale_asymmetry).length > 0 && (
           <div className="report-panel full-width">
@@ -186,6 +189,8 @@ export default function Home() {
   const [log, setLog] = useState<string[]>([]);
   const [reports, setReports] = useState<ClaimReport[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [isReplay, setIsReplay] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
@@ -198,17 +203,32 @@ export default function Home() {
     setLog([]);
     setReports(null);
     setError(null);
+    setUsage(null);
+    setIsReplay(false);
 
-    const es = new EventSource(`${API_URL}/api/analyze?text=${encodeURIComponent(text)}`);
+    // ?demo=1 forces the recorded replay even on a machine that has keys, so
+    // the demo can be rehearsed and recorded without spending SerpApi credits.
+    const forceDemo =
+      typeof window !== "undefined" && new URLSearchParams(window.location.search).has("demo");
+    const es = new EventSource(
+      `${API_URL}/api/analyze?text=${encodeURIComponent(text)}${forceDemo ? "&demo=true" : ""}`
+    );
     const finish = () => {
       es.close();
       setRunning(false);
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 200);
     };
 
-    es.addEventListener("progress", (m) =>
-      setLog((l) => [...l, describe(JSON.parse((m as MessageEvent).data))])
-    );
+    es.addEventListener("demo", () => setIsReplay(true));
+    es.addEventListener("progress", (m) => {
+      const data = JSON.parse((m as MessageEvent).data);
+      // Every stage carrying usage refreshes the meter, so the SerpApi spend
+      // ticks upward live rather than appearing only at the end.
+      if (typeof data.live_calls === "number") {
+        setUsage({ live_calls: data.live_calls, cache_hits: data.cache_hits ?? 0 });
+      }
+      setLog((l) => [...l, describe(data)]);
+    });
     es.addEventListener("report", (m) => {
       setReports(JSON.parse((m as MessageEvent).data).claims);
       finish();
@@ -342,6 +362,16 @@ export default function Home() {
       {/* Live Progress + Results */}
       {(log.length > 0 || error || reports !== null) && (
         <div className="content-area" ref={resultRef}>
+          {isReplay && (
+            <div className="replay-banner">
+              <span className="replay-dot" />
+              <div>
+                <strong>Replay of a recorded run.</strong> This is a session captured from a real
+                analysis — not a live one. Nothing here was generated just now.
+              </div>
+            </div>
+          )}
+
           {/* Progress Log */}
           {log.length > 0 && (
             <div className="progress-panel">
@@ -350,10 +380,16 @@ export default function Home() {
                 <span className="progress-panel-title">
                   {running ? "Live progress" : "Completed"}
                 </span>
+                {usage && (
+                  <span className="usage-meter" title="Live SerpApi calls billed vs calls served from cache">
+                    <span className="usage-chip live">◉ {usage.live_calls} SerpApi calls</span>
+                    <span className="usage-chip cached">⛁ {usage.cache_hits} cached</span>
+                  </span>
+                )}
                 {!running && (
                   <span
                     style={{
-                      marginLeft: "auto",
+                      marginLeft: usage ? 8 : "auto",
                       fontFamily: "var(--font-mono)",
                       fontSize: 10,
                       color: "var(--lime)",
