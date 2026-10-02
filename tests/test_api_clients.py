@@ -28,8 +28,24 @@ def test_build_llm_client_raises_a_clear_error_when_groq_key_is_missing(monkeypa
         build_llm_client()
 
 
-def test_build_llm_client_raises_a_clear_error_when_openai_key_is_missing(monkeypatch):
+def test_build_llm_client_uses_groq_alone_when_openai_key_is_missing(monkeypatch):
+    """The OpenAI fallback guards against a Groq outage; it is not required to
+    run the system, so a Groq-only configuration must work.
+    """
+    from patientzero.llm_client import GroqLLMClient
+
     monkeypatch.setenv("GROQ_API_KEY", "groq-test-key")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
-        build_llm_client()
+
+    client = build_llm_client()
+
+    assert isinstance(client, GroqLLMClient)
+
+
+def test_build_llm_client_wraps_both_providers_when_both_keys_are_present(monkeypatch):
+    from patientzero.llm_client import FallbackLLMClient
+
+    monkeypatch.setenv("GROQ_API_KEY", "groq-test-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test-key")
+
+    assert isinstance(build_llm_client(), FallbackLLMClient)

@@ -28,19 +28,21 @@ def build_serp_client(
 
 
 def build_llm_client() -> LLMClient:
+    """Groq is required; OpenAI is an optional fallback.
+
+    Requiring both keys meant someone holding only a Groq key could not run the
+    system at all, even though Groq alone is a complete configuration — the
+    fallback exists to survive a provider outage, not to be mandatory.
+    """
     groq_key = os.environ.get("GROQ_API_KEY")
     if not groq_key:
         raise RuntimeError(
             "GROQ_API_KEY is not set; the API layer requires a real Groq "
             "API key for its primary LLM client"
         )
+    primary = GroqLLMClient(api_key=groq_key)
+
     openai_key = os.environ.get("OPENAI_API_KEY")
     if not openai_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY is not set; the API layer requires a real OpenAI "
-            "API key for its fallback LLM client"
-        )
-    return FallbackLLMClient(
-        primary=GroqLLMClient(api_key=groq_key),
-        fallback=OpenAILLMClient(api_key=openai_key),
-    )
+        return primary
+    return FallbackLLMClient(primary=primary, fallback=OpenAILLMClient(api_key=openai_key))
