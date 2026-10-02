@@ -15,6 +15,7 @@ coordinated push rather than organic spread.
 Per spec sec 6 every engine here is optional: a failure degrades to an empty
 field and the claim's report still ships.
 """
+import re
 from datetime import datetime, timezone
 
 from patientzero.models import Claim, MediaMention, Propagation, TrendPoint
@@ -23,9 +24,38 @@ from patientzero.serp_client import SerpApiError
 # Enough to show a trail without spending the credit budget on breadth.
 MAX_NEWS_MENTIONS = 8
 
+# Google Trends indexes short topical queries. Sending it a full claim sentence
+# returned a series that was 271/273 exactly zero — a flat line that looked
+# broken and carried no signal. Reducing the claim to a few content words gets
+# a query with actual search volume behind it.
+MAX_TRENDS_WORDS = 5
+_STOPWORDS = frozenset(
+    """a an and are as at be been but by can could did do does for from had has
+    have he her his how i if in into is it its of on or said say says she so
+    than that the their them then there these they this to was we were what
+    when where which who will with would you your not no""".split()
+)
+
+# A series this sparse is noise: Trends normalizes a single blip to 100, so one
+# spike against an otherwise empty history says nothing about propagation.
+MIN_NONZERO_TREND_POINTS = 4
+
 
 def build_news_query(claim: Claim, hl: str = "en", gl: str = "in") -> dict:
     return {"engine": "google_news", "q": claim.text, "hl": hl, "gl": gl}
+
+
+def trends_keywords(text: str) -> str:
+    """Reduce a claim to the few content words Trends can actually match.
+
+    Falls back to the original text when stripping stopwords leaves nothing,
+    so a short or unusual claim still produces a query.
+    """
+    words = re.findall(r"[\w']+", text)
+    kept = [w for w in words if w.lower() not in _STOPWORDS]
+    if not kept:
+        return text
+    return " ".join(kept[:MAX_TRENDS_WORDS])
 
 
 def build_trends_query(claim: Claim) -> dict:
@@ -33,7 +63,7 @@ def build_trends_query(claim: Claim) -> dict:
     # interest spike we are trying to line up against the origin date.
     return {
         "engine": "google_trends",
-        "q": claim.text,
+        "q": trends_keywords(claim.text),
         "data_type": "TIMESERIES",
         "date": "all",
     }
@@ -95,6 +125,9 @@ def parse_trend_timeline(raw: dict) -> list[TrendPoint]:
             )
         except (TypeError, ValueError):
             continue
+
+    if sum(1 for p in points if p.value > 0) < MIN_NONZERO_TREND_POINTS:
+        return []
     return points
 
 

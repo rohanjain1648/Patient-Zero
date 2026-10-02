@@ -58,6 +58,8 @@ TRENDS_RESPONSE = {
             {"date": "Jan 2004", "timestamp": "1072915200", "values": [{"extracted_value": 0}]},
             {"date": "Jun 2016", "timestamp": "1464739200", "values": [{"extracted_value": 91}]},
             {"date": "Jul 2016", "timestamp": "1467331200", "values": [{"extracted_value": 40}]},
+            {"date": "Aug 2016", "timestamp": "1470009600", "values": [{"extracted_value": 25}]},
+            {"date": "Sep 2016", "timestamp": "1472688000", "values": [{"extracted_value": 12}]},
         ]
     }
 }
@@ -93,7 +95,7 @@ def test_parse_news_results_keeps_an_undated_item_rather_than_dropping_it():
 
 def test_parse_trend_timeline_extracts_points_in_order():
     points = parse_trend_timeline(TRENDS_RESPONSE)
-    assert [p.value for p in points] == [0, 91, 40]
+    assert [p.value for p in points] == [0, 91, 40, 25, 12]
     assert points[1].timestamp == 1464739200
     assert points[1].date == "Jun 2016"
 
@@ -103,12 +105,25 @@ def test_parse_trend_timeline_survives_a_malformed_payload():
     assert parse_trend_timeline({"interest_over_time": {"timeline_data": [{}]}}) == []
 
 
+def test_parse_trend_timeline_keeps_a_series_with_enough_signal():
+    """The sparsity floor must not throw away a genuinely active series."""
+    busy = {
+        "interest_over_time": {
+            "timeline_data": [
+                {"date": f"M{i}", "timestamp": str(1000 + i), "values": [{"extracted_value": i + 1}]}
+                for i in range(10)
+            ]
+        }
+    }
+    assert len(parse_trend_timeline(busy)) == 10
+
+
 def test_trace_propagation_combines_both_engines_and_finds_the_peak():
     client = StubSerpClient({"google_news": NEWS_RESPONSE, "google_trends": TRENDS_RESPONSE})
     prop = trace_propagation(CLAIM, client)
 
     assert len(prop.mentions) == 2
-    assert len(prop.trend) == 3
+    assert len(prop.trend) == 5
     # Jun 2016 is the 91 — the maximum.
     assert prop.peak_date == "2016-06-01"
     assert {c["engine"] for c in client.calls} == {"google_news", "google_trends"}
@@ -148,3 +163,58 @@ def test_trace_propagation_marks_a_failed_engine_in_progress():
     trace_propagation(CLAIM, client, on_progress=lambda s, d: events.append((s, d)))
 
     assert all(d["ok"] is False for _, d in events)
+
+
+# ── Trends keyword reduction ──────────────────────────────────────────────
+# Google Trends indexes short topical queries, not sentences. Sending a full
+# claim returned an all-but-empty series (271 of 273 points exactly zero),
+# which rendered as a flat line and told the user nothing.
+
+def test_trends_query_is_shortened_to_topical_keywords():
+    from patientzero.propagation import trends_keywords
+
+    claim = Claim(text="The Great Wall of China is visible from space with the naked eye.", index=0)
+    assert trends_keywords(claim.text) == "Great Wall China visible space"
+
+
+def test_trends_keywords_drops_stopwords_and_punctuation():
+    from patientzero.propagation import trends_keywords
+
+    assert trends_keywords("A study said that coffee can prevent cancer!") == "study coffee prevent cancer"
+
+
+def test_trends_keywords_caps_length():
+    from patientzero.propagation import trends_keywords
+
+    long_claim = " ".join(f"word{i}" for i in range(30))
+    assert len(trends_keywords(long_claim).split()) <= 5
+
+
+def test_trends_keywords_falls_back_to_the_original_when_all_stopwords():
+    from patientzero.propagation import trends_keywords
+
+    assert trends_keywords("is the of and") == "is the of and"
+
+
+def test_build_trends_query_uses_the_shortened_keywords():
+    params = build_trends_query(CLAIM)
+    assert params["q"] == "Great Wall visible space"
+    # The news engine still gets the full claim: it matches on article text.
+    assert build_news_query(CLAIM)["q"] == CLAIM.text
+
+
+def test_trend_is_dropped_when_the_series_is_effectively_empty():
+    """A series with almost no non-zero points is noise, not a signal, and
+    must not be presented as an attention curve.
+    """
+    from patientzero.propagation import parse_trend_timeline
+
+    flat = {
+        "interest_over_time": {
+            "timeline_data": [
+                {"date": f"M{i}", "timestamp": str(1000 + i), "values": [{"extracted_value": 0}]}
+                for i in range(50)
+            ]
+        }
+    }
+    assert parse_trend_timeline(flat) == []
